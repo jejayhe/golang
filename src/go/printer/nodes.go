@@ -1194,15 +1194,54 @@ func (p *printer) stmtList(list []ast.Stmt, nindent int, nextIsRBrace bool) {
 	}
 	var line int
 	i := 0
-	for _, s := range list {
+	for j, s := range list {
 		// ignore empty statements (was issue 3466)
 		if _, isEmpty := s.(*ast.EmptyStmt); !isEmpty {
 			// nindent == 0 only for lists of switch/select case clauses;
 			// in those cases each clause is a new section
 			if len(p.output) > 0 {
+				min := 1
+				if j > 0 {
+					// if prev is if statement, add a blank line
+					if _, prevIfStmt := list[j-1].(*ast.IfStmt); prevIfStmt {
+						min = 2
+					} else {
+						// if cur is return statement, add a blank line
+						if _, curIsReturnStmt := list[j].(*ast.ReturnStmt); curIsReturnStmt {
+							if len(list) > 2 {
+								min = 2
+							}
+						}
+					}
+					if j < len(list)-1 {
+						// if prev is assign, cur is assign with err, next is if statement, add a blank line
+						_, prevIsAssignStmt := list[j-1].(*ast.AssignStmt)
+						curAssignStmt, curIsAssignStmt := list[j].(*ast.AssignStmt)
+						_, nextIsIfStmt := list[j+1].(*ast.IfStmt)
+						if prevIsAssignStmt && curIsAssignStmt && nextIsIfStmt {
+							curAssignLhsLast, ok := curAssignStmt.Lhs[len(curAssignStmt.Lhs)-1].(*ast.Ident)
+							if ok && curAssignLhsLast.Name == "err" {
+								min = 2
+							}
+						}
+					}
+
+					// if prev is multi assign statement, and prev is not assign with err, current is if statement, add a blank line
+					if j > 1 {
+						_, prev2IsAssignStmt := list[j-2].(*ast.AssignStmt)
+						prevAssignStmt, prevIsAssignStmt := list[j-1].(*ast.AssignStmt)
+						_, curIsIfStmt := list[j].(*ast.IfStmt)
+						if prev2IsAssignStmt && prevIsAssignStmt && curIsIfStmt {
+							prevAssignLhsLast, ok := prevAssignStmt.Lhs[len(prevAssignStmt.Lhs)-1].(*ast.Ident)
+							if !(ok && prevAssignLhsLast.Name == "err") {
+								min = 2
+							}
+						}
+					}
+				}
 				// only print line break if we are not at the beginning of the output
 				// (i.e., we are not printing only a partial program)
-				p.linebreak(p.lineFor(s.Pos()), 1, ignore, i == 0 || nindent == 0 || p.linesFrom(line) > 0)
+				p.linebreak(p.lineFor(s.Pos()), min, ignore, i == 0 || nindent == 0 || p.linesFrom(line) > 0)
 			}
 			p.recordLine(&line)
 			p.stmt(s, nextIsRBrace && i == len(list)-1)
