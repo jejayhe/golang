@@ -1983,6 +1983,9 @@ func (p *printer) declList(list []ast.Decl) {
 			if prev != tok || getDoc(d) != nil {
 				min = 2
 			}
+			if tok == token.FUNC && prev == token.FUNC {
+				min = 2
+			}
 			// start a new section if the next declaration is a function
 			// that spans multiple lines (see also issue #19544)
 			p.linebreak(p.lineFor(d.Pos()), min, ignore, tok == token.FUNC && p.numLines(d) > 1)
